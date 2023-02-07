@@ -1,0 +1,116 @@
+/*
+  Microwave Motion Sensor
+  LOLIN (WEMOS) Mini-D Pro
+  HW-MS03 Microwave motion sensor
+  1000uf 25V Capacitor
+  Lolin Relay
+  MQTT to publish "Motion detected!" so I can log it from my MQTT Server
+
+//  Capacitor across the  +  - was removed from the final product, will re-evaluate
+//  when the relay is cycled on/off a few times.
+
+  Senses motion from front and back of the PCB.  Not so much from the sides.
+  This even worked through a fairly thick plastic table that I used as a barrier.
+
+  By Nick Sebring; 2-4-2023
+*/
+
+// INSTALL WIFI, MQTT
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+
+// Connect to the WiFi
+const char* ssid = "MYSSID";
+const char* password = "MYPASSWORD";
+const char* mqtt_server = "MQTT_IP_ADDRESS";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+
+
+boolean reconnect() {  // **********************************************************
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print (F("Contacting MQTT server..."));
+    // Attempt to connect
+    { if (client.connect("MCSHED"))    //assign a "client name".  Each wemos must have a unique name
+        Serial.println (F("connected"));
+
+      // ... SUBSCRIBE TO TOPICS
+      client.subscribe("Ouside/Shed/Light");
+
+      return client.connected();
+
+      Serial.print (F("Failed to connect. "));
+      Serial.println (F(" Attempting connection again in 3 seconds"));
+      // Wait 3 seconds before retrying
+      //      delay(3000);
+      return 0;
+    }
+  }
+}
+
+void setup()
+{
+  {
+    Serial.begin(9600);
+    client.setServer(mqtt_server, 1883);
+  }
+  // Connect to WiFinetwork
+  Serial.println();
+  Serial.println();
+  Serial.print (F("Connecting to "));
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  WiFi.mode(WIFI_STA);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    //Serial.begin(9600);
+    Serial.print (F("."));
+  }
+  Serial.println (F(""));
+  Serial.println (F("WiFi connected"));
+  // Print the IP address
+  Serial.print (F("Local IP: "));
+  Serial.println(WiFi.localIP());
+
+  //  *********************************************************************************
+
+  Serial.println(F("Microwave sensor located in the Motorcycle shed"));
+
+
+}
+void loop()
+{
+  if (!client.connected()) {
+    reconnect();
+  }
+  
+  {
+    int HWPin = 16;
+    int Relay = 14;
+    int val;                          // This is the value from the HW-MS03 Microwave motion sensor
+
+    pinMode(HWPin, INPUT);          // HW-MS03 Microwave motion sensor
+    pinMode(BUILTIN_LED, OUTPUT);   // BLUE LED onboard as OUTPUT (High/LOW is inverted)
+    pinMode(Relay, OUTPUT);
+    val = digitalRead(HWPin);
+
+    if (val == HIGH)  //low = no motion, high = motion
+    { Serial.println("Motion detected.  ");
+      digitalWrite(BUILTIN_LED, LOW);
+      digitalWrite(Relay, HIGH);  //Turn something on
+      client.publish("Outside/MC_shed", "Motion detected!");
+      delay(450000); //   5000= 5 sec   300000= 5min, 600000= 10 min
+      //  Keep it on for a period of time  //
+    }
+
+    else
+    {
+      Serial.println("Scanning...");
+      digitalWrite(BUILTIN_LED, HIGH);
+      digitalWrite(Relay, LOW);  //Turn something off
+    }
+  }
+}
